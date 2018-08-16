@@ -7,6 +7,7 @@ import dbLoop
 import aiomysql
 from ModelMetaclass import ModelMetaclass
 import Field
+from dbLoop import dbLoop
 
 class Model(dict, metaclass=ModelMetaclass):
     def __init__(self, **kw):
@@ -14,12 +15,15 @@ class Model(dict, metaclass=ModelMetaclass):
 
     def __getattr__(self, key):
         try:
-            return self['key']
+            return self[key]
         except KeyError:
             raise AttributeError(r"'Model object has no attribute '%s" %(key))
 
     def __setattr__(self, key, value):
-        self['key'] = value
+        self[key] = value
+
+    def log(cls,sql, args=()):
+        logging.info('SQL: %s' % sql)
 
     def getValue(self,key):
         return getattr(self, key, None)
@@ -39,10 +43,10 @@ class Model(dict, metaclass=ModelMetaclass):
 
 
     async def select(self, sql, args,size = None):
-        log(sql,args)
+        Model.log(None, sql,args)
         global __pool
 
-        with (await __pool) as conn:
+        with (await dbLoop.creat_Pool(None)) as conn:
             cur = await conn.cursor(aiomysql.DictCursor)
             await cur.execute(sql.replace('?', '&s'), args or ())
 
@@ -55,7 +59,7 @@ class Model(dict, metaclass=ModelMetaclass):
             return rs
 
     async def execute(self, sql, args):
-        log(sql)
+        Model.log(None, sql)
         global __pool
 
         with (await __pool) as conn:
@@ -78,8 +82,10 @@ class Model(dict, metaclass=ModelMetaclass):
         return cls(**rs[0])
 
     async def save(self):
-        args = list(map(self.getValueOrDefault, self.__fields))
+        args = list(map(self.getValueOrDefault, self.__fields__))
         args.append(self.getValueOrDefault(self.__primary_key__))
-        rows = await Model.execute(self.__insert__, args)
+        rows = await Model.execute(None, self.__insert__, args)
         if rows !=1:
             logging.warn('failed to insert record: affected rows: %s' % rows)
+
+        print('sava finish')
