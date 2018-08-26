@@ -28,6 +28,7 @@ def post(path):
     return decorator
 
 #检查处理函数是不是有request请求参数，返回布尔值，如果有request参数，检查该参数是否为函数的最后一个参数，如果不是就报错
+#我的理解：检查函数（fn）中的形参，是否含有request，request是否为最后一个形参
 def has_request_arg(fn):
     sig = inspect.signature(fn)
     params = sig.parameters   #返回一个dict，含有参数名，参数值
@@ -43,6 +44,7 @@ def has_request_arg(fn):
     return found
 
 #检查函数是否有关键字参数集，返回布尔值
+#VAR_KEYWORD，指的是**kw这个形参
 def has_var_kw_arg(fn):
     params = inspect.signature(fn).parameters
 
@@ -52,6 +54,8 @@ def has_var_kw_arg(fn):
 
 
 #检查函数是否有命名关键字参数，返回布尔值
+#KEYWORD_ONLY类型形参只会在VAR_POSITIONAL类型参数的后面而且不带**前缀
+#即(*args, d, **kwargs)，d就是KEYWORD_ONLY
 def has_named_kw_args(fn):
     params = inspect.signature(fn).parameters
 
@@ -81,7 +85,7 @@ def get_required_kw_args(fn):
     params = inspect.signature(fn).parameters
 
     for name, param in params.items():
-        if param.kind == inspect.Parameter.KEYWORD_ONLY and param.defalut == inspect.Parameter.empty
+        if param.kind == inspect.Parameter.KEYWORD_ONLY and param.defalut == inspect.Parameter.empty:
             # param.kind : describes how argument values are bound to the parameter.
             # KEYWORD_ONLY : value must be supplied as keyword argument, which appear after a * or *args
             # param.default : the default value for the parameter,if has no default value,this is set to Parameter.empty
@@ -115,7 +119,111 @@ class RequestHandler(object):
                     return web.HTTPBadRequest('Missing Content-Type')
                 ct = request.content_type.lower()
 
+                if ct.startswith('application/json'):
+                    # 处理json类型的数据，传入参数字典中
+                    params = await request.json()
+                    if not isinstance(params, dict):
+                        return web.HTTPBadRequest('JSON body must be object')
+                elif ct.startswith('application/x-www-from-urlencoded') or ct.startswith('multipart/form-data'):
+                    # 处理表单类型的数据，传入参数字典中
+                    params = await request.post()
+                    kw = dict(**params)
+                else:
+                    # 暂不支持处理其他正文类型的数据
+                    return web.HTTPBadRequest('Unsupported Content-Type: %s' % request.content_type)
+            if request.method == 'GET':
+                # GET请求预处理
+                qs = request.query_string
 
+                # 获取URL中的请求参数，如name = Justone, id = 007
+                if qs:
+                    # 将请求餐宿传入到参数字典中
+                    kw = dict()
+                    for k, v in parse.parse_qs(qs, True).items():
+                        # parse a query string, data are returned as a dict. the dict keys are the unique query variable names and the values are lists of values for each name
+                        # a True value indicates that blanks should be retained as blank strings
+                        kw[k] = v[0]
+
+            if kw is None:
+                # 请求无参数
+                kw = dict(**request.match_info)
+                # Read-only property with AbstractMatchInfo instance for result of route resolving
+            else:
+                # 参数字典手机请求参数
+                if not self.__has_var_kw_arg and self.__named_kw_args:
+                    copy = dict()
+
+                    for name in self.__named_kw_args:
+                        if name in kw:
+                            copy[name] = kw[name]
+                    kw = copy
+                for k,v in request.match_info.items():
+                    if k in kw:
+                        logging.warning('Duplicate arg name in named arg and kw args: %s' % k)
+                    kw[k] = v
+            if self.__has_request_arg:
+                kw['request'] = request
+            if self.required_kw_args:
+                # 收集无默认值的关键字参数
+                for name in self.required_kw_args:
+                    if not name in kw:
+                        # 当存在关键字参数未被赋值时返回，例如 一般的账号注册时，没填入密码就提交注册申请时，提示密码未输入
+                        return web.HTTPBadRequest('Missing arguments: %s' % name)
+            logging.info('call with args: %s' % str(kw))
+
+            try:
+                r = await self._func(**kw)
+                # 最后调用处理函数，并传入请求参数，进行请求处理
+                return r
+            except APIError as e:
+                return dict(error=e.error, data=e.data, message=e.message)
+
+def add_static(app):
+    # 添加静态资源路径
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')   #获得包含'static'的绝对路径
+    # os.path.dirname(os.path.abspath(__file__)) 返回脚本所在目录的绝对路径
+    app.router.add_static('/static', path)  # 添加静态资源路径
+    logging.info('add static %s => %s' %('/static', path))
+
+def add_route(app, fn):
+    # 将处理函数注册到web服务程序的路由当中
+    method = getattr(fn, '__method__', None)    # 获取fn的__method__属性的值，无则为None
+    path = getattr(fn, '__route__', None) # 获取fn的__route__属性的值，无则为None
+
+    if path is None or method is None:
+        raise ValueError('@get or @post not define in %s.' % str(fn))
+    if not asyncio.iscoroutinefunction(fn) and not inspect.isgeneratorfunction(fn):
+        # 当处理函数不是协程时，封装成协程函数
+        fn = asyncio.coroutine(fn)
+    logging.info('add route %s %s => %s(%s)' % (method, path, fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
+    app.route.add_route(method, path, RequestHandler(app, fn))
+
+def add_routes(app, module_name):
+    # 自动把handler模块符合条件的函数注册
+    n = module_name.rfind('.')
+
+    if n == (-1):
+        # 没有匹配项时
+        mod = __import__(module_name, globals(), locals())
+        # import一个模块， 获取模块名__name__
+    else:
+        # 获取模块属性name， 并赋值给mod
+        name = module_name[n+1:]
+        mod = getattr(__import__(module_name[:n], globals(), locals(), [name]), name)
+
+    for attr in dir(mod):
+        # dir(mod) 获取模块所有属性
+        if attr.startswith('_'):
+            # 略过所有私有属性
+            continue
+        fn = getattr(mod, attr)
+        # 获取属性的值，可以是一个method
+        if callable(fn):
+            method = getattr(fn, '__method__', None)
+            path = getattr(fn, '__route__', None)
+            if method and path:
+                # 对已经修饰过的URL处理函数注册到web服务的路由中
+                add_route(app, fn)
 
 
 
