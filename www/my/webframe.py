@@ -137,7 +137,7 @@ class RequestHandler(object):
 
                 # 获取URL中的请求参数，如name = Justone, id = 007
                 if qs:
-                    # 将请求餐宿传入到参数字典中
+                    # 将请求参数传入到参数字典中
                     kw = dict()
                     for k, v in parse.parse_qs(qs, True).items():
                         # parse a query string, data are returned as a dict. the dict keys are the unique query variable names and the values are lists of values for each name
