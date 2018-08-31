@@ -6,7 +6,8 @@
 Configuration
 '''
 
-import config_defaullt
+import config_default
+import os
 
 class Dict(dict):
 	'增加字典调用方式, a.b'
@@ -39,11 +40,11 @@ def merge(defaluts, override):
 def toDict(d):
 	#转换成Dict类
 	D = Dict()
-	for k, v in d.items:
+	for k, v in d.items():
 		D[k] = toDict(v) if isinstance(v, dict) else v
-		return D
+	return D
 
-configs = config_defaullt.configs
+configs = config_default.configs
 try:
 	import config_override
 	configs = merge(configs, config_override.configs)

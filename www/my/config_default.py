@@ -21,6 +21,3 @@ configs = {
     }
 
 }
-
-for k, v in configs.items():
-    print('%s, %s' % (k ,v ))
