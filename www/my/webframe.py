@@ -189,7 +189,7 @@ def add_static(app):
     # 添加静态资源路径
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')   #获得包含'static'的绝对路径
     # os.path.dirname(os.path.abspath(__file__)) 返回脚本所在目录的绝对路径
-    app.router.add_static('/static', path)  # 添加静态资源路径
+    app.router.add_static('/static/', path)  # 添加静态资源路径
     logging.info('add static %s => %s' %('/static', path))
 
 def add_route(app, fn):

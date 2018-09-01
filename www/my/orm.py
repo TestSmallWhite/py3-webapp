@@ -12,21 +12,21 @@ def log(sql,args=()):
     logging.info('SQL: %s' %sql)
 
 async def create_pool(loop, **kw):
-    logging.info('Create database connection pool')
-
-    global __pool
-
-    __pool = await aiomysql.create_pool(host=kw.get('host', 'localhost'),
-        port=kw.get('port', 3306),
-        user=kw['user'],
-        password=kw['password'],
-        db=kw['db'],
-        charset=kw.get('charset', 'utf8'),
-        autocommit=kw.get('autocommit', True),
-        maxsize=kw.get('maxsize', 10),
-        minsize=kw.get('minsize', 1),
-        loop=loop
-    )
+	' 创建全局连接池，**kw 关键字参数集，用于传递host port user password db等的数据库连接参数 '
+	logging.info('create database connection pool')
+	global __pool #将__pool定义为全局变量
+	__pool = await aiomysql.create_pool(
+		host=kw.get('host', 'localhost'), #主机ip，默认本机
+		port=kw.get('port', 3306), #端口，默认3306
+		user=kw['user'], #用户
+		password=kw['password'], #用户口令
+		db=kw['db'], #选择数据库
+		charset=kw.get('charset', 'utf8'), #设置数据库编码，默认utf8
+		autocommit=kw.get('autocommit', True), #设置自动提交事务，默认打开
+		maxsize=kw.get('maxsize', 10), #设置最大连接数，默认10
+		minsize=kw.get('minsize', 1), #设置最少连接数，默认1
+		loop=loop #需要传递一个事件循环实例，若无特别声明，默认使用asyncio.get_event_loop()
+	)
 
 
 async def select(sql, args, size=None):

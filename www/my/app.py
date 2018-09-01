@@ -11,7 +11,7 @@ from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
 import orm
 import config
-from webframe import add_routes
+from webframe import add_routes, add_static
 
 async def logger_factory(app, handler):
     #中间件，相当于一堵墙， 可在处理请求前， 对请求进行验证、筛选、记录等操作
@@ -108,23 +108,26 @@ def datetime_filter(t):
 
 
 async def init(loop):
-	' 服务器运行程序：创建web实例程序，该实例程序绑定路由和处理函数，运行服务器，监听端口请求，送到路由处理 '
-	await orm.create_pool(loop=loop, **config.configs.db)
-	app = web.Application(loop=loop, middlewares=[logger_factory, response_factory])
-	add_routes(app, 'handlers')
-	init_jinja2(app, filters=dict(datetime=datetime_filter))
+	#' 服务器运行程序：创建web实例程序，该实例程序绑定路由和处理函数，运行服务器，监听端口请求，送到路由处理 '
+	# await orm.create_pool(loop=loop, **config.configs.db)
+	# app = web.Application(loop=loop, middlewares=[logger_factory, response_factory])
+	# init_jinja2(app, filters=dict(datetime=datetime_filter))
+    # add_routes(app, 'handlers')
+    # add_static(app)
+	# srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9000)
+	# logging.info('Server started at http://127.0.0.1:9000')
+	# return srv
 
+    await orm.create_pool(loop=loop, **config.configs.db)
+    app = web.Application(loop=loop, middlewares=[logger_factory, response_factory])
+    init_jinja2(app, filters=dict(datetime=datetime_filter))
+    add_routes(app, 'handlers')
+    add_static(app)
+    srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9000)
+    logging.info('Server started at http://127.0.0.1:9000')
+    return srv
 
-	srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9000)
-	logging.info('Server started at http://127.0.0.1:9000')
-	return srv
-
-#获取循环对象
 loop = asyncio.get_event_loop()
-
-#初始化循环
 loop.run_until_complete(init(loop))
-
-#启动循环
 loop.run_forever()
 
